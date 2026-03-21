@@ -30,10 +30,12 @@ Observación: <resultado de la acción, lo rellenaré yo>
 Herramientas disponibles:
 - execute_shell_command(command: str): Ejecuta un comando en la consola Linux.
 - get_skill_docs(skill_name: str): Obtiene la documentación de una habilidad para saber qué comandos usar.
+- install_skill(skill_name: str): Lee la documentación de un skill y ejecuta automáticamente los comandos de instalación/configuración que encuentre.
 - save_fact(key: str, value: str): Guarda información persistente.
 
 Habilidades instaladas: {", ".join(available_skills)}
 
+Si el usuario menciona que hay un nuevo skill o quieres usar uno nuevo, usa `install_skill` primero para asegurar que todas sus dependencias y configuraciones estén listas.
 Sé conciso y directo. No inventes herramientas que no existan.
 """
         
@@ -75,6 +77,8 @@ Sé conciso y directo. No inventes herramientas que no existan.
                     observation = f"Documentación de {args.get('skill_name')}:\n{skill_data['content']}"
                 except Exception as e:
                     observation = f"Error cargando skill: {e}"
+            elif tool == "install_skill":
+                observation = self._auto_install_skill(args.get("skill_name", ""))
             elif tool == "save_fact":
                 self.db.save_memory(args.get("key", ""), args.get("value", ""))
                 observation = "Hecho guardado correctamente."
@@ -113,6 +117,9 @@ Sé conciso y directo. No inventes herramientas que no existan.
             elif tool == "get_skill_docs":
                 name_match = re.search(r"skill_name=['\"](.*?)['\"]", args_str)
                 args["skill_name"] = name_match.group(1) if name_match else args_str.strip("'\"")
+            elif tool == "install_skill":
+                name_match = re.search(r"skill_name=['\"](.*?)['\"]", args_str)
+                args["skill_name"] = name_match.group(1) if name_match else args_str.strip("'\"")
             elif tool == "save_fact":
                 k_match = re.search(r"key=['\"](.*?)['\"]", args_str)
                 v_match = re.search(r"value=['\"](.*?)['\"]", args_str)
@@ -122,3 +129,21 @@ Sé conciso y directo. No inventes herramientas que no existan.
             return {"tool": tool, "args": args}
         
         return {"tool": action_content, "args": {}}
+
+    def _auto_install_skill(self, skill_name: str) -> str:
+        try:
+            skill_data = self.skills.load_skill(skill_name)
+            commands = skill_data.get("commands", [])
+            
+            if not commands:
+                return f"No se encontraron comandos de configuración en {skill_name}.md"
+            
+            results = []
+            for cmd in commands:
+                # Security: could filter here for 'pip', 'apt', etc.
+                res = execute_command(cmd)
+                results.append(f"Cmd: `{cmd}` -> {res}")
+            
+            return "Skill configurado automáticamente:\n" + "\n".join(results)
+        except Exception as e:
+            return f"Error en la autoinstalación: {str(e)}"
