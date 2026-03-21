@@ -1,0 +1,8 @@
+python-telegram-bot
+requests
+httpx
+python-dotenv
+markdown
+pytest
+sqlalchemy
+pip-tools
