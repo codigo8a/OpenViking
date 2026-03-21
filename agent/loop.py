@@ -15,7 +15,13 @@ class AgentLoop:
         self.max_iters = max_iters
 
     def run(self, user_id: str, user_input: str):
-        # 1. Load context
+        # 1. Sync skills (auto-discovery)
+        new_skills_log = self._sync_skills()
+        if new_skills_log:
+            print(f"Auto-Sync Skills: {new_skills_log}")
+            # Optionally notify chat (we'll return it in the context later if needed)
+
+        # 2. Load context
         history = self.db.get_chat_history(user_id)
         available_skills = self.skills.list_skills()
         
@@ -42,6 +48,10 @@ Sé conciso y directo. No inventes herramientas que no existan.
         messages = [{"role": "system", "content": system_prompt}]
         for msg in history:
             messages.append(msg)
+            
+        if new_skills_log:
+            messages.append({"role": "system", "content": f"AVISO: He detectado y configurado automáticamente nuevos archivos de skill en la carpeta docs:\n{new_skills_log}"})
+            
         messages.append({"role": "user", "content": user_input})
 
         for i in range(self.max_iters):
@@ -144,6 +154,26 @@ Sé conciso y directo. No inventes herramientas que no existan.
                 res = execute_command(cmd)
                 results.append(f"Cmd: `{cmd}` -> {res}")
             
-            return "Skill configurado automáticamente:\n" + "\n".join(results)
+            # Record installation success
+            self.db.mark_skill_installed(skill_name)
+            
+            return f"Skill '{skill_name}' configurado automáticamente:\n" + "\n".join(results)
         except Exception as e:
-            return f"Error en la autoinstalación: {str(e)}"
+            return f"Error en la autoinstalación de {skill_name}: {str(e)}"
+
+    def _sync_skills(self) -> str:
+        """
+        Scans docs folder for any skills NOT in the DB and installs them.
+        """
+        all_skills = self.skills.list_skills()
+        new_found = []
+        
+        for s in all_skills:
+            if not self.db.is_skill_installed(s):
+                print(f"Detectado nuevo skill sin instalar: {s}. Iniciando autoconfiguración...")
+                res = self._auto_install_skill(s)
+                new_found.append(res)
+        
+        if not new_found:
+            return ""
+        return "\n---\n".join(new_found)

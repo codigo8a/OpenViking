@@ -29,6 +29,25 @@ class SQLiteStore:
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            # Table for tracking installed skills
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS installed_skills (
+                    skill_name TEXT PRIMARY KEY,
+                    installed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.commit()
+
+    def is_skill_installed(self, skill_name: str) -> bool:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM installed_skills WHERE skill_name = ?", (skill_name,))
+            return cursor.fetchone() is not None
+
+    def mark_skill_installed(self, skill_name: str):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT OR IGNORE INTO installed_skills (skill_name) VALUES (?)", (skill_name,))
             conn.commit()
 
     def save_memory(self, key: str, value: str):
